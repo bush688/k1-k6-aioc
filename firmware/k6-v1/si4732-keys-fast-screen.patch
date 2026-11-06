@@ -1,0 +1,190 @@
+--- a/app/app.c
++++ b/app/app.c
+@@ -1023,6 +1023,24 @@
+ 
+     // scan the hardware keys
+     KEY_Code_t Key = KEYBOARD_Poll();
++#ifdef ENABLE_UART
++    static KEY_Code_t remoteKey;
++    static uint8_t remoteTicks;
++    bool held;
++    const KEY_Code_t requested = UART_ViewerTakeKey(&held);
++    if (Key != KEY_INVALID || gPttIsPressed || gCurrentFunction == FUNCTION_TRANSMIT)
++        remoteTicks = 0;
++    else {
++        if (requested != KEY_INVALID && remoteTicks == 0 && gKeyReading1 == KEY_INVALID) {
++            remoteKey = requested;
++            remoteTicks = (held ? key_repeat_delay_10ms : key_debounce_10ms) + 2;
++        }
++        if (remoteTicks) {
++            --remoteTicks;
++            Key = remoteKey;
++        }
++    }
++#endif
+ 
+     if (Key != KEY_INVALID) // any key pressed
+         boot_counter_10ms = 0;   // cancel boot screen/beeps if any key pressed
+@@ -1247,6 +1265,9 @@
+ #endif
+ 
+     CheckKeys();
++#ifdef ENABLE_UART
++    UART_ViewerSendStripe();
++#endif
+ }
+ 
+ void cancelUserInputModes(void) {
+--- a/app/uart.c
++++ b/app/uart.c
+@@ -40,6 +40,7 @@
+ #include "driver/eeprom.h"
+ #include "driver/gpio.h"
+ #include "driver/uart.h"
++#include "driver/st7565.h"
+ #include "functions.h"
+ #include "misc.h"
+ #include "settings.h"
+@@ -178,6 +179,45 @@
+ 
+ static uint32_t Timestamp;
+ static uint16_t gUART_WriteIndex;
++static uint8_t viewerStripe = 128;
++static uint8_t viewerScans = 7;
++static bool viewerFullRefresh;
++static uint8_t viewerLastStripe[128][8];
++static KEY_Code_t viewerKey = KEY_INVALID;
++static bool viewerHeld;
++
++KEY_Code_t UART_ViewerTakeKey(bool *held)
++{
++    const KEY_Code_t key = viewerKey;
++    *held = viewerHeld;
++    viewerKey = KEY_INVALID;
++    return key;
++}
++
++void UART_ViewerSendStripe(void)
++{
++    if (viewerStripe >= 128 || gCurrentFunction == FUNCTION_TRANSMIT)
++        return;
++
++    // Skip unchanged stripes, but periodically resend a full screen for reconnects.
++    for (unsigned checked = 0; checked < 16 && viewerStripe < 128; ++checked) {
++        const uint8_t stripe = viewerStripe++;
++        uint8_t packet[15] = {0xAA, 0x55, 0x02, 0, 9, stripe};
++        const unsigned page = stripe / 16;
++        const unsigned bit = (stripe % 16) / 2;
++        const unsigned column = (stripe % 2) * 64;
++        const uint8_t *line = page ? gFrameBuffer[page - 1] : gStatusLine;
++        for (unsigned x = 0; x < 64; ++x)
++            packet[6 + x / 8] |= ((line[column + x] >> bit) & 1u) << (x % 8);
++
++        if (!viewerFullRefresh && memcmp(packet + 6, viewerLastStripe[stripe], 8) == 0)
++            continue;
++        memcpy(viewerLastStripe[stripe], packet + 6, 8);
++        packet[14] = 0x0A;
++        UART_Send(packet, sizeof(packet));
++        return;
++    }
++}
+ static bool bIsEncrypted = true;
+ 
+ static void SendReply(void *pReply, uint16_t Size) {
+@@ -503,8 +543,48 @@
+         if (gUART_WriteIndex == DmaLength)
+             return false;
+ 
+-        while (gUART_WriteIndex != DmaLength && UART_DMA_Buffer[gUART_WriteIndex] != 0xABU)
++        while (gUART_WriteIndex != DmaLength && UART_DMA_Buffer[gUART_WriteIndex] != 0xABU) {
++            if (UART_DMA_Buffer[gUART_WriteIndex] == 0xAA) {
++                const unsigned available = DMA_INDEX(DmaLength + sizeof(UART_DMA_Buffer) - gUART_WriteIndex, 0);
++                if (available == 1)
++                    return false;
++                if (UART_DMA_Buffer[DMA_INDEX(gUART_WriteIndex, 1)] == 0x55) {
++                    if (available < 4)
++                        return false;
++                    const uint8_t command = UART_DMA_Buffer[DMA_INDEX(gUART_WriteIndex, 2)];
++                    const uint8_t key = UART_DMA_Buffer[DMA_INDEX(gUART_WriteIndex, 3)];
++                    if (command == 3 || command == 4) {
++                        gUART_WriteIndex = DMA_INDEX(gUART_WriteIndex, 4);
++                        if (key < KEY_INVALID && key != KEY_PTT && viewerKey == KEY_INVALID) {
++                            viewerKey = (KEY_Code_t)key;
++                            viewerHeld = command == 4;
++                        }
++                        continue;
++                    }
++                }
++            }
++            if (UART_DMA_Buffer[gUART_WriteIndex] == 0x55) {
++                const unsigned available = DMA_INDEX(DmaLength + sizeof(UART_DMA_Buffer) - gUART_WriteIndex, 0);
++                if (available == 1)
++                    return false;
++                if (UART_DMA_Buffer[DMA_INDEX(gUART_WriteIndex, 1)] == 0xAA) {
++                    if (available < 4)
++                        return false;
++                    if (UART_DMA_Buffer[DMA_INDEX(gUART_WriteIndex, 2)] == 0 &&
++                        UART_DMA_Buffer[DMA_INDEX(gUART_WriteIndex, 3)] == 0) {
++                        gUART_WriteIndex = DMA_INDEX(gUART_WriteIndex, 4);
++                        if (viewerStripe == 128) {
++                            viewerStripe = 0;
++                            viewerFullRefresh = ++viewerScans >= 8;
++                            if (viewerFullRefresh)
++                                viewerScans = 0;
++                        }
++                        continue;
++                    }
++                }
++            }
+             gUART_WriteIndex = DMA_INDEX(gUART_WriteIndex, 1);
++        }
+ 
+         if (gUART_WriteIndex == DmaLength)
+             return false;
+--- a/app/uart.h
++++ b/app/uart.h
+@@ -22,6 +22,9 @@
+ bool UART_IsCommandAvailable(void);
+ 
+ void UART_HandleCommand(void);
++void UART_ViewerSendStripe(void);
++#include "driver/keyboard.h"
++KEY_Code_t UART_ViewerTakeKey(bool *held);
+ 
+ #endif
+ 
+--- a/app/si.c
++++ b/app/si.c
+@@ -21,6 +21,9 @@
+ #include "ui/helper.h"
+ #include <string.h>
+ #include "./si.h"
++#ifdef ENABLE_UART
++#include "app/uart.h"
++#endif
+ #include "app/fm.h"
+ #include "driver/st7565.h"
+ #include "external/printf/printf.h"
+@@ -584,6 +587,22 @@
+           HandleUserInput();
+         }
+ 
++#ifdef ENABLE_UART
++        if (cnt % 10 == 0 && SI_run) {
++            // The SI4732 screen is drawn in this loop, outside the normal app scheduler.
++            UART_IsCommandAvailable();
++            bool held;
++            const KEY_Code_t key = UART_ViewerTakeKey(&held);
++            if (key != KEY_INVALID && kbds.current == KEY_INVALID) {
++                light_open();
++                display_flag = 1;
++                // A short-release event also supports the frequency entry dialog.
++                SI_key(KEY_INVALID, false, false, true, key);
++            }
++            UART_ViewerSendStripe();
++        }
++#endif
++
+         if (seeking && cnt % 100 == 0) {
+             UI_PrintStringSmallBuffer("*", gStatusLine);
+             bool valid = false;

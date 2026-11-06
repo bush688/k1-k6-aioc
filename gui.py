@@ -28,7 +28,7 @@ def phone_addresses() -> list[str]:
 class ControlWindow:
     def __init__(self) -> None:
         self.root = tk.Tk()
-        self.root.title("K1 远程收听服务端 · AIOC v8.7 · 电脑耳麦")
+        self.root.title("K1 远程收听服务端 · AIOC v8.8 · 电脑耳麦")
         self.root.geometry("980x940")
         self.root.minsize(760, 700)
         self.events: queue.Queue[tuple[bool, str]] = queue.Queue()
@@ -195,6 +195,12 @@ class ControlWindow:
         self.desktop_mic_meter.grid(row=6, column=0, columnspan=5, sticky="ew", pady=(5, 0))
         desktop.columnconfigure(1, weight=1)
         self.microphone_device.bind('<<ComboboxSelected>>', self.release_desktop_ptt)
+        self.audio_device_locked = tk.BooleanVar(value=False)
+        ttk.Checkbutton(desktop, text="锁定音频设备", variable=self.audio_device_locked,
+                        command=self.apply_audio_device_lock).grid(row=7, column=0, columnspan=5, sticky="w", pady=(6, 0))
+        for selector in self.audio_device_selectors():
+            selector.bind("<MouseWheel>", lambda event: self.scroll_audio_selector(event, viewport))
+
 
         control = ttk.LabelFrame(outer, text="电脑控制", padding=10)
         control.pack(fill="x", pady=5)
@@ -278,6 +284,21 @@ class ControlWindow:
             self.port.set(previous)
         else:
             self.port.set("")
+
+    def audio_device_selectors(self):
+        return self.audio_device, self.tx_output, self.headphone_device, self.microphone_device
+
+    def apply_audio_device_lock(self):
+        state = "disabled" if self.audio_device_locked.get() else "readonly"
+        for selector in self.audio_device_selectors():
+            selector.configure(state=state)
+
+    @staticmethod
+    def scroll_audio_selector(event, viewport):
+        if event.delta:
+            steps = max(1, abs(event.delta) // 120)
+            viewport.yview_scroll(-steps if event.delta > 0 else steps, "units")
+        return "break"
 
     def refresh_audio(self) -> None:
         try:

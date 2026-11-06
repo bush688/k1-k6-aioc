@@ -1,0 +1,3 @@
+2df956eccfddcb569451482dad421eb2d1ca2013cd35aa6f6e30d29d67cf5e1f  K6-v1-133HS-screen-and-keys-preview.packed.bin
+ca0ef736c9ed1f140e19e62fc4a41ce42ac8ec5f79932aedd2a80e152e861d29  K6-v1-133HS-screen-only.packed.bin
+4dc00b47570f10b017427d07dcd826ebc27ed101b991d71851bb1a1cd9380830  LOSEHU133HS-upstream.bin

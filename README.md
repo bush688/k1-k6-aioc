@@ -4,6 +4,10 @@
 
 ![AIOC 接线与音频、串口通路示意](docs/aioc-connection.svg)
 
+## 在线体验
+
+[打开 K1 / K6 模拟网页](https://bush688.github.io/k1-k6-aioc/demo.html)。可切换 K1 / K6 键盘和短波模式，试用调谐、模拟收听及按住 PTT。模拟在浏览器内运行，无需电台或 AIOC。下方「网页与 Android 界面」介绍实际界面的入口和功能。
+
 ## AIOC 是什么
 
 AIOC（All-In-One Cable）是开源的手台接口。K 头接手台的耳机与话筒插座，USB 接电脑。电脑端会看到 USB 麦克风、扬声器和一个 COM 口。USB 声卡传输收发音频，DTR 控制硬件 PTT，串口交换屏幕和按键数据。手台需要安装支持对应画面协议的固件。 [AIOC 项目与硬件资料](https://github.com/skuep/AIOC) · [AIOC 接线及用法](https://github.com/skuep/AIOC/wiki/Getting-Started)

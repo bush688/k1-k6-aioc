@@ -84,6 +84,29 @@ Android v0.2.8 的普通版和录音版使用相同的手机服务端网页。�
 
 [下载 K6 提速版](firmware/k6-v1/K6-v1-133HS-SI4732-keys-fast-screen.packed.bin) · [K6 源码基线与构建说明](firmware/k6-v1/README.md)
 
+## 文件与目录说明
+
+GitHub 文件列表中间一列显示最近一次修改的提交说明。下表列出文件的实际用途。
+
+| 文件或目录 | 用途 |
+| --- | --- |
+| `docs/` | 接线示意图、键盘布局图和在线模拟网页 `demo.html` |
+| `firmware/` | K1、K6 固件、源码补丁、校验值与各机型说明 |
+| `README.md` | 项目功能、安装使用、刷机步骤、注意事项和下载入口 |
+| `gui.py` | Windows 服务端图形界面，配置串口、收发音频、耳麦、PTT 和预制语音 |
+| `server.py` | HTTP 服务与遥控网页，处理电台连接、屏幕回传、按键、PTT、音频和信道接口 |
+| `desktop_audio.py` | 电脑耳机监听与话筒采集，处理桌面端音频流 |
+| `voice_presets.py` | 预制语音存储、语音合成、录音条目与发射播放 |
+| `voice_presets_ui.py` | 网页端预制语音面板及交互脚本 |
+| `requirements.txt` | Python 运行依赖列表 |
+| `selfcheck.py` | 服务端及协议等功能的自动自检 |
+| `test_desktop_audio.py` | 电脑监听与话筒音频处理的测试 |
+| `test_voice_presets.py` | 预制语音、合成和播放逻辑的测试 |
+| `.gitignore` | 排除本机配置、缓存和构建产生的文件 |
+| `LICENSE` | 本项目 Apache-2.0 许可证，第三方固件遵循各自说明中的协议 |
+
+Windows 可执行程序、Android APK 和可刷写固件集中在 [Releases 下载区](https://github.com/bush688/k1-k6-aioc/releases)。
+
 ## 开源协议
 
 本仓库的原创服务端代码和 K6 修改采用 Apache-2.0。K6 基于 losehu 的 Apache-2.0 固件，保留上游许可、作者标注和修改补丁。依赖和上游固件各自适用原协议。 [Apache-2.0 许可](LICENSE) · [AIOC 上游](https://github.com/skuep/AIOC)

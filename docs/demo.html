@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>K1 / K6 AIOC · 在线模拟</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#edf2f6;color:#192b40;font:16px system-ui,sans-serif}main{max-width:900px;margin:auto;padding:24px}header,.panel{background:white;border:1px solid #cfdae5;border-radius:16px;padding:18px;margin-bottom:14px}h1{margin:0;font-size:clamp(24px,5vw,40px)}p{line-height:1.6}.badge{color:#075f51;font-weight:bold}.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}.lcd{background:#35472e;color:#e6f0ce;border:6px solid #dce5d3;border-radius:12px;padding:20px;min-height:200px;font: bold 18px monospace}.freq{font-size:clamp(29px,7vw,54px);margin:24px 0}.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}button,select{font:inherit;padding:9px;border:1px solid #a7b8ca;border-radius:8px;background:#f1f6fa;color:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:3px solid #2479d5}#ptt{background:#a02937;color:white;touch-action:none;user-select:none}#ptt.active{background:#661321}#status{min-height:26px}label{display:inline-block;margin:4px}a{color:#165da9}@media(max-width:650px){main{padding:12px}.grid{grid-template-columns:1fr}}
+</style>
+<main><header><div class="badge">AIOC · 模拟体验</div><h1>K1 / K6 远程电台</h1><p>试试切换机型和频率、模拟收听、按住 PTT。所有操作在本页模拟，无需设备，也不会发射。</p>
+<label>机型 <select id="model"><option value="k1">UV-K1</option><option value="k6">UV-K6 v1</option></select></label>
+<label>模式 <select id="mode"><option value="fm">普通通联</option><option id="shortwave" value="sw" disabled>短波收音（K6）</option></select></label></header>
+<div class="grid"><section class="panel" aria-label="电台屏幕"><div class="lcd"><div id="lcdMode"></div><div class="freq" id="frequency"></div><div id="lcdState"></div></div></section>
+<section class="panel" aria-label="遥控键盘"><div class="keys" id="keys"></div></section></div>
+<section class="panel"><button id="listen" aria-pressed="false">模拟收听</button> <button id="ptt">按住 PTT</button><p id="status" role="status">等待操作</p>
+<a href="https://github.com/bush688/k1-k6-aioc#网页与-android-界面">界面说明与下载</a></section></main>
+<script>
+const byId = id => document.getElementById(id);
+const model = byId('model'), mode = byId('mode'), ptt = byId('ptt'), listen = byId('listen');
+const layouts = {k1:['MENU','◀','▶','EXIT','F1','F2','*','#'], k6:['M','▲','▼','EXIT','F','*','#']};
+let frequency = 438.550, listening = false, transmitting = false;
+function draw(message) {
+  byId('frequency').textContent = frequency.toFixed(3) + ' MHz';
+  byId('lcdMode').textContent = mode.value === 'sw' ? 'SI4732 · SW' : 'FM · VFO';
+  byId('lcdState').textContent = transmitting ? 'TX · 模拟发射' : listening ? 'RX · 模拟收听' : '待机';
+  if (message) byId('status').textContent = message;
+  ptt.classList.toggle('active', transmitting);
+}
+function key(label) {
+  const step = mode.value === 'sw' ? 0.005 : 0.025;
+  if (label === '▶' || label === '▲') frequency += step;
+  if (label === '◀' || label === '▼') frequency -= step;
+  draw('模拟按键：' + label);
+}
+function renderKeys() {
+  byId('keys').replaceChildren(...[...layouts[model.value], ...'1234567890'].map(label => {
+    const button = document.createElement('button');
+    button.textContent = label;
+    button.addEventListener('click', () => key(label));
+    return button;
+  }));
+}
+function setTx(active) {
+  if (transmitting === active) return;
+  transmitting = active;
+  draw(active ? 'PTT 已按下（模拟）' : 'PTT 已释放（模拟）');
+}
+model.onchange = () => {
+  byId('shortwave').disabled = model.value === 'k1';
+  if (model.value === 'k1') mode.value = 'fm';
+  mode.onchange();
+  renderKeys();
+};
+mode.onchange = () => {
+  setTx(false);
+  ptt.disabled = mode.value === 'sw';
+  frequency = ptt.disabled ? 7.100 : 438.550;
+  draw(ptt.disabled ? '短波模式：试试 ▲ / ▼ 调谐' : '普通通联模式');
+};
+listen.onclick = () => {
+  listening = !listening;
+  listen.setAttribute('aria-pressed', String(listening));
+  listen.textContent = listening ? '停止模拟收听' : '模拟收听';
+  draw(listening ? '模拟收听中（无音频）' : '已停止模拟收听');
+};
+ptt.onpointerdown = e => { if (e.button === 0) { ptt.setPointerCapture(e.pointerId); setTx(true); } };
+ptt.onpointerup = ptt.onpointercancel = ptt.onlostpointercapture = () => setTx(false);
+ptt.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setTx(true); } };
+ptt.onkeyup = ptt.onblur = window.onblur = () => setTx(false);
+renderKeys();
+draw();
+</script></html>
